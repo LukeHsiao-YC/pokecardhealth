@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢健康大戰</title>
+    <title>寶可夢健康大戰 (PTCG規則版)</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React & ReactDOM -->
@@ -16,21 +16,24 @@
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap');
         body { font-family: 'Noto Sans TC', sans-serif; }
         
-        /* 寶可夢對戰風格背景 */
+        /* 戰鬥背景 */
         .battle-bg {
-            background: linear-gradient(180deg, #87CEEB 0%, #E0F7FA 50%, #4CAF50 50%, #2E7D32 100%);
+            background: radial-gradient(circle at center, #ffffff 0%, #f0f9ff 40%, #bae6fd 100%);
             background-size: cover;
         }
 
-        /* 角色動畫 */
-        .float-anim { animation: float 3s ease-in-out infinite; }
-        @keyframes float {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-            100% { transform: translateY(0px); }
+        /* 卡牌樣式 */
+        .card-shadow {
+            box-shadow: 2px 4px 10px rgba(0,0,0,0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card-shadow:hover {
+            transform: translateY(-10px);
+            box-shadow: 4px 8px 15px rgba(0,0,0,0.4);
         }
 
-        .damage-anim { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        /* 動畫 */
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
         @keyframes shake {
             10%, 90% { transform: translate3d(-2px, 0, 0); }
             20%, 80% { transform: translate3d(4px, 0, 0); }
@@ -38,307 +41,420 @@
             40%, 60% { transform: translate3d(8px, 0, 0); }
         }
 
-        .attack-push { animation: push 0.3s forwards; }
-        @keyframes push {
-            0% { transform: scale(1) translateX(0); }
-            50% { transform: scale(1.1) translateX(50px); } /* Player attacks right */
-            100% { transform: scale(1) translateX(0); }
-        }
-        
-        .enemy-attack-push { animation: pushLeft 0.3s forwards; }
-        @keyframes pushLeft {
-            0% { transform: scale(1) translateX(0); }
-            50% { transform: scale(1.1) translateX(-50px); } /* Enemy attacks left */
-            100% { transform: scale(1) translateX(0); }
-        }
-
         .pop-text {
-            animation: popUp 1s forwards;
+            animation: popUp 1.2s forwards;
             pointer-events: none;
+            text-shadow: 2px 2px 0px white, -1px -1px 0px white, 1px -1px 0px white, -1px 1px 0px white, 1px 1px 0px white;
         }
         @keyframes popUp {
             0% { opacity: 1; transform: translateY(0) scale(1); }
-            100% { opacity: 0; transform: translateY(-80px) scale(1.5); }
+            100% { opacity: 0; transform: translateY(-100px) scale(1.5); }
         }
 
-        /* 打字機效果 (修正為簡單淡入，避免複雜度) */
-        .fade-in {
-            animation: fadeIn 0.5s ease-in;
+        .player-attack { animation: lungeRight 0.3s forwards; }
+        @keyframes lungeRight {
+            0% { transform: translateX(0); }
+            50% { transform: translateX(50px); }
+            100% { transform: translateX(0); }
         }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+
+        .enemy-attack { animation: lungeLeft 0.3s forwards; }
+        @keyframes lungeLeft {
+            0% { transform: translateX(0); }
+            50% { transform: translateX(-50px); }
+            100% { transform: translateX(0); }
+        }
+        
+        /* 能量球樣式 */
+        .energy-orb {
+            box-shadow: inset -2px -2px 6px rgba(0,0,0,0.3);
+        }
+
+        /* 滾動條隱藏 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
     </style>
 </head>
-<body class="h-screen overflow-hidden select-none bg-slate-900">
+<body class="h-screen overflow-hidden select-none bg-slate-800">
     <div id="root" class="h-full"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
 
-        // 圖片資源 (使用 PokeAPI Sprites)
-        // 怪力 (Machamp) - 象徵健康/運動
-        const IMG_PLAYER = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/68.png";
-        // 卡比獸 (Snorlax) - 象徵代謝症候群/懶惰
-        const IMG_ENEMY = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/143.png";
-
-        // 遊戲數值
-        const MAX_HP_PLAYER = 100;
-        const MAX_HP_ENEMY = 120;
-        const MAX_ENERGY = 3;
-
-        // 卡牌資料
-        const CARDS = [
-            { id: 1, name: "深蹲重擊", type: "attack", cost: 1, val: 15, desc: "核心肌群發力！造成 15 點傷害。", color: "bg-orange-500", icon: "sword" },
-            { id: 2, name: "HIIT連擊", type: "attack", cost: 2, val: 25, desc: "高強度間歇運動！造成 25 點傷害。", color: "bg-red-600", icon: "flame" },
-            { id: 3, name: "蔬菜護盾", type: "defense", cost: 1, val: 12, desc: "纖維質保護腸道！獲得 12 點護盾。", color: "bg-green-500", icon: "shield" },
-            { id: 4, name: "多喝水", type: "heal", cost: 1, val: 10, desc: "促進新陳代謝，恢復 10 點生命。", color: "bg-blue-400", icon: "droplet" },
-            { id: 5, name: "充足睡眠", type: "buff", cost: 2, val: 0, desc: "恢復體力，下回合能量全滿！", color: "bg-purple-500", icon: "moon" },
-            { id: 6, name: "有氧慢跑", type: "attack", cost: 1, val: 10, desc: "燃燒脂肪，造成 10 點穩定傷害。", color: "bg-yellow-500", icon: "wind" },
+        // --- 圖片資源 ---
+        const IMG_PLAYER = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/68.png"; // 怪力
+        const IMG_ENEMY = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/143.png"; // 卡比獸
+        
+        // --- 遊戲常數 ---
+        const MAX_HP_PLAYER = 150; // 怪力 HP
+        const MAX_HP_ENEMY = 180;  // 卡比獸 HP
+        
+        // --- 怪力 (玩家) 的招式表 (非手牌) ---
+        const PLAYER_MOVES = [
+            { id: 'm1', name: "低空踢", damage: 30, cost: 1, desc: "踢擊對手膝蓋。造成30點傷害。" },
+            { id: 'm2', name: "借力摔", damage: 60, cost: 2, desc: "利用對手的力量。造成60點傷害。" },
+            { id: 'm3', name: "極巨健康拳", damage: 100, cost: 3, desc: "強大的健康一擊！造成100點傷害，恢復自己20點HP。", heal: 20 }
         ];
 
-        // 敵人動作
-        const ENEMY_ACTIONS = [
-            { name: "打哈欠", type: "wait", val: 0, text: "卡比獸打了一個大哈欠，什麼都沒做。" },
-            { name: "暴飲暴食", type: "attack", val: 15, text: "卡比獸丟出了高熱量漢堡！造成 15 點傷害。" },
-            { name: "泰山壓頂", type: "attack", val: 20, text: "卡比獸使用了體重優勢！造成 20 點傷害。" },
-            { name: "熬夜滑手機", type: "debuff", val: 10, text: "卡比獸釋放藍光攻擊！造成 10 點精神傷害。" },
+        // --- 卡牌定義 (手牌) ---
+        // 類型: energy, item, supporter
+        const DECK_TEMPLATE = [
+            // 15張能量卡
+            ...Array(15).fill({ type: 'energy', name: "鬥能量", desc: "附著於寶可夢身上以使用招式。", color: "bg-orange-600" }),
+            // 物品卡 (Item) - 無限使用
+            ...Array(4).fill({ type: 'item', id: 'potion', name: "傷藥", desc: "恢復自己的寶可夢30點HP。", color: "bg-blue-500", effect: 'heal', val: 30 }),
+            ...Array(2).fill({ type: 'item', id: 'cycling', name: "腳踏車", desc: "抽1張卡。", color: "bg-blue-500", effect: 'draw', val: 1 }),
+            ...Array(2).fill({ type: 'item', id: 'dumbbell', name: "啞鈴", desc: "本回合招式傷害+20。", color: "bg-blue-500", effect: 'buff_dmg', val: 20 }),
+            // 支援者卡 (Supporter) - 一回合一張
+            ...Array(3).fill({ type: 'supporter', id: 'research', name: "博士的研究", desc: "丟棄手牌(此遊戲中不丟棄)，從牌庫抽3張卡。", color: "bg-red-500", effect: 'draw', val: 3 }),
+            ...Array(2).fill({ type: 'supporter', id: 'nurse', name: "寶可夢中心小姐", desc: "將自己的寶可夢HP恢復60點。", color: "bg-red-500", effect: 'heal', val: 60 }),
+            ...Array(2).fill({ type: 'supporter', id: 'boss', name: "老大的指令", desc: "迫使對手做有氧運動！造成對手20點傷害並抽1張卡。", color: "bg-red-500", effect: 'attack_draw', val: 20 }),
         ];
 
-        // 簡易圖標組件 (避免 Lucide 載入問題，直接用 SVG)
-        const Icon = ({ name, className }) => {
-            if (name === "sword") return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/></svg>;
-            if (name === "shield") return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>;
-            if (name === "droplet") return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22a7 7 0 0 0 7-7c0-2-2-3.9-7-7-5 3.1-7 5-7 7a7 7 0 0 0 7 7"/></svg>;
-            if (name === "flame") return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-2.246-5.318 6-6.5 1.5 0 3.77 2.24 3.77 4.5 0 .2-.01.38-.03.56.56.54.92 1.3.92 2.14a3 3 0 0 1-3 3 3 3 0 0 1-3-3H8.5z"/></svg>;
-            if (name === "moon") return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>;
-            if (name === "wind") return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></svg>;
-            return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/></svg>;
+        // --- 簡易圖標 ---
+        const Icons = {
+            Energy: () => <span className="inline-block w-4 h-4 rounded-full bg-orange-600 border border-white energy-orb mr-1 align-middle"></span>,
+            Item: () => <span className="text-blue-200 font-bold text-xs">[物品]</span>,
+            Supporter: () => <span className="text-red-200 font-bold text-xs">[支援者]</span>
         };
 
         const App = () => {
-            const [scene, setScene] = useState('menu'); // menu, battle, win, lose
-            const [turn, setTurn] = useState('player');
-            const [msg, setMsg] = useState("戰鬥開始！");
+            // 場景: menu, battle, win, lose
+            const [scene, setScene] = useState('menu'); 
             
-            // 狀態
+            // 玩家狀態
             const [pHP, setPHP] = useState(MAX_HP_PLAYER);
-            const [pShield, setPShield] = useState(0);
-            const [pEnergy, setPEnergy] = useState(MAX_ENERGY);
-            const [eHP, setEHP] = useState(MAX_HP_ENEMY);
-            
-            // 邏輯
-            const [deck, setDeck] = useState([]);
+            const [pEnergy, setPEnergy] = useState(0); // 附著在身上的能量數
             const [hand, setHand] = useState([]);
-            const [nextEnemyMove, setNextEnemyMove] = useState(null);
+            const [deck, setDeck] = useState([]);
+            const [discardPile, setDiscardPile] = useState(0);
+            
+            // 回合狀態
+            const [turn, setTurn] = useState('player'); // player, enemy
+            const [energyAttachedThisTurn, setEnergyAttachedThisTurn] = useState(false);
+            const [supporterUsedThisTurn, setSupporterUsedThisTurn] = useState(false);
+            const [damageBuff, setDamageBuff] = useState(0); // 本回合傷害加成
+            
+            // 敵人狀態
+            const [eHP, setEHP] = useState(MAX_HP_ENEMY);
+            const [enemyNextMove, setEnemyNextMove] = useState(null);
 
-            // 動畫
-            const [pAnim, setPAnim] = useState('float-anim');
-            const [eAnim, setEAnim] = useState('float-anim');
+            // UI & 動畫狀態
+            const [msg, setMsg] = useState("");
             const [floater, setFloater] = useState(null); // { text, x, y, color }
+            const [pAnim, setPAnim] = useState('');
+            const [eAnim, setEAnim] = useState('');
+            const [showRuleModal, setShowRuleModal] = useState(false);
 
-            // 初始化
-            useEffect(() => {
-                if (scene === 'battle') {
-                    startBattle();
-                }
-            }, [scene]);
-
+            // 初始化戰鬥
             const startBattle = () => {
                 setPHP(MAX_HP_PLAYER);
                 setEHP(MAX_HP_ENEMY);
-                setPShield(0);
-                setPEnergy(MAX_ENERGY);
+                setPEnergy(0);
+                setDiscardPile(0);
                 setTurn('player');
-                setMsg("野生卡比獸出現了！使用健康習慣擊敗它！");
+                setMsg("戰鬥開始！請從手牌附著能量或使用道具！");
+                setEnergyAttachedThisTurn(false);
+                setSupporterUsedThisTurn(false);
+                setDamageBuff(0);
+
+                // 洗牌
+                const newDeck = [...DECK_TEMPLATE].sort(() => Math.random() - 0.5);
+                // 初始抽牌 (7張，模擬PTCG)
+                const initialHand = newDeck.slice(0, 7);
+                const remainingDeck = newDeck.slice(7);
                 
-                // 建立牌組
-                let newDeck = [...CARDS, ...CARDS, ...CARDS].sort(() => Math.random() - 0.5);
-                setDeck(newDeck);
-                setHand(newDeck.slice(0, 4));
-                setDeck(prev => prev.slice(4));
+                setHand(initialHand);
+                setDeck(remainingDeck);
                 
-                planEnemyMove();
+                planEnemyAction();
+                setScene('battle');
             };
 
-            const planEnemyMove = () => {
-                const move = ENEMY_ACTIONS[Math.floor(Math.random() * ENEMY_ACTIONS.length)];
-                setNextEnemyMove(move);
+            // 敵人AI
+            const planEnemyAction = () => {
+                const actions = [
+                    { name: "衝撞", dmg: 20, text: "卡比獸使用了衝撞！" },
+                    { name: "泰山壓頂", dmg: 40, text: "卡比獸使用了泰山壓頂！" },
+                    { name: "睡覺", dmg: 0, heal: 30, text: "卡比獸睡著了，恢復了體力！" },
+                    { name: "打呼", dmg: 10, text: "卡比獸打呼聲太吵了！" }
+                ];
+                const action = actions[Math.floor(Math.random() * actions.length)];
+                setEnemyNextMove(action);
             };
 
+            // 抽牌功能
+            const drawCard = (count = 1) => {
+                if (deck.length === 0) {
+                    setMsg("牌庫沒牌了！無法抽牌！");
+                    return;
+                }
+                const draw = deck.slice(0, count);
+                const left = deck.slice(count);
+                setHand(prev => [...prev, ...draw]);
+                setDeck(left);
+                return draw.length; // 回傳實際抽到的張數
+            };
+
+            // 浮動文字效果
             const showFloater = (text, type) => {
-                // type: 'damage' (red), 'heal' (green), 'shield' (blue)
-                const color = type === 'heal' ? 'text-green-400' : type === 'shield' ? 'text-blue-400' : 'text-red-500';
-                const isPlayer = type === 'heal' || type === 'shield' || turn === 'enemy'; 
-                // 簡單判斷位置
-                setFloater({ text, color, target: isPlayer ? 'player' : 'enemy' });
+                const color = type === 'damage' ? 'text-red-600' : type === 'heal' ? 'text-green-500' : 'text-blue-500';
+                const target = type === 'damage' ? (turn === 'player' ? 'enemy' : 'player') : (turn === 'player' ? 'player' : 'enemy');
+                setFloater({ text, color, target });
                 setTimeout(() => setFloater(null), 1000);
             };
 
-            const playerAction = (card) => {
-                if (turn !== 'player' || pEnergy < card.cost) return;
+            // --- 玩家動作 ---
 
-                setPEnergy(p => p - card.cost);
-                setHand(h => h.filter(c => c !== card));
+            // 1. 附著能量 (從手牌)
+            const attachEnergy = (cardIndex) => {
+                if (turn !== 'player') return;
+                if (energyAttachedThisTurn) {
+                    setMsg("這個回合已經附著過能量了！");
+                    return;
+                }
+                
+                // 移除手牌
+                const newHand = [...hand];
+                newHand.splice(cardIndex, 1);
+                setHand(newHand);
 
+                setPEnergy(prev => prev + 1);
+                setEnergyAttachedThisTurn(true);
+                setMsg("將鬥能量附著在怪力身上！");
+                showFloater("+1 能量", "buff");
+            };
+
+            // 2. 使用物品/支援者 (從手牌)
+            const playTrainer = (card, index) => {
+                if (turn !== 'player') return;
+                
+                // 檢查支援者限制
+                if (card.type === 'supporter' && supporterUsedThisTurn) {
+                    setMsg("每個回合只能使用一張支援者卡！");
+                    return;
+                }
+
+                // 移除手牌
+                const newHand = [...hand];
+                newHand.splice(index, 1);
+                setHand(newHand);
+                setDiscardPile(prev => prev + 1);
+
+                // 執行效果
                 let effectMsg = "";
+                if (card.type === 'supporter') setSupporterUsedThisTurn(true);
 
-                if (card.type === 'attack') {
-                    setPAnim('attack-push');
-                    setTimeout(() => setPAnim('float-anim'), 300);
-                    setTimeout(() => {
-                        setEAnim('damage-anim');
-                        setTimeout(() => setEAnim('float-anim'), 500);
-                        setEHP(h => Math.max(0, h - card.val));
+                switch (card.effect) {
+                    case 'heal':
+                        const healAmount = card.val;
+                        setPHP(prev => Math.min(MAX_HP_PLAYER, prev + healAmount));
+                        showFloater(`+${healAmount}`, 'heal');
+                        effectMsg = `使用了${card.name}，恢復${healAmount}點HP！`;
+                        break;
+                    case 'draw':
+                        const drawn = drawCard(card.val);
+                        effectMsg = `使用了${card.name}，抽了${drawn}張卡！`;
+                        break;
+                    case 'buff_dmg':
+                        setDamageBuff(prev => prev + card.val);
+                        effectMsg = `使用了${card.name}，本回合傷害+${card.val}！`;
+                        showFloater(`傷害UP`, 'buff');
+                        break;
+                    case 'attack_draw':
+                        // 老大的指令 (特殊效果)
+                        setEHP(prev => Math.max(0, prev - card.val));
+                        drawCard(1);
+                        setEAnim('shake');
                         showFloater(`-${card.val}`, 'damage');
-                    }, 200);
-                    effectMsg = `怪力使用了 ${card.name}！`;
-                } else if (card.type === 'defense') {
-                    setPShield(s => s + card.val);
-                    showFloater(`+${card.val} 盾`, 'shield');
-                    effectMsg = `防禦提升！`;
-                } else if (card.type === 'heal') {
-                    setPHP(h => Math.min(MAX_HP_PLAYER, h + card.val));
-                    showFloater(`+${card.val}`, 'heal');
-                    effectMsg = `生命恢復！`;
-                } else if (card.type === 'buff') {
-                    effectMsg = `精力充沛！`;
-                    // 這裡簡單處理：下回合能量恢復機制在 startTurn 處理
+                        effectMsg = `使用了${card.name}！造成傷害並抽卡！`;
+                        break;
+                    default:
+                        effectMsg = `使用了${card.name}！`;
                 }
-
                 setMsg(effectMsg);
-
-                if (deck.length > 0) {
-                    const newCard = deck[0];
-                    setDeck(d => d.slice(1));
-                    setHand(h => [...h, newCard]);
-                } else {
-                    // 洗牌
-                    const reshuffle = [...CARDS, ...CARDS].sort(() => Math.random() - 0.5);
-                    setDeck(reshuffle);
-                }
-
-                checkWinCondition(card.type === 'attack' ? card.val : 0);
             };
 
-            const checkWinCondition = (dmg) => {
-                if (eHP - dmg <= 0) {
+            // 3. 使用招式 (怪力本體) - 會結束回合
+            const useMove = (move) => {
+                if (turn !== 'player') return;
+                if (pEnergy < move.cost) {
+                    setMsg("能量不足！無法使用這個招式！");
+                    return;
+                }
+
+                // 攻擊邏輯
+                const totalDamage = move.damage + damageBuff;
+                setEHP(prev => Math.max(0, prev - totalDamage));
+                
+                // 動畫
+                setPAnim('player-attack');
+                setTimeout(() => setPAnim(''), 300);
+                setTimeout(() => {
+                    setEAnim('shake');
+                    showFloater(`-${totalDamage}`, 'damage');
+                    setTimeout(() => setEAnim(''), 500);
+                }, 150);
+
+                // 額外效果 (如恢復)
+                if (move.heal) {
+                    setPHP(prev => Math.min(MAX_HP_PLAYER, prev + move.heal));
+                    setTimeout(() => showFloater(`+${move.heal}`, 'heal'), 200);
+                }
+
+                setMsg(`怪力使用了${move.name}！造成${totalDamage}點傷害！`);
+
+                // 檢查勝利
+                if (eHP - totalDamage <= 0) {
                     setTimeout(() => setScene('win'), 1000);
+                    return;
                 }
+
+                // 結束回合
+                setTimeout(endPlayerTurn, 1500);
             };
 
-            const endTurn = () => {
+            const endPlayerTurn = () => {
                 setTurn('enemy');
-                setMsg("輪到卡比獸了...");
-                setTimeout(enemyTurn, 1500);
+                setMsg("回合結束，輪到對手了...");
+                setDamageBuff(0); // 清除傷害加成
+                
+                setTimeout(enemyAction, 1500);
             };
 
-            const enemyTurn = () => {
-                const move = nextEnemyMove;
-                setEAnim('enemy-attack-push');
-                setTimeout(() => setEAnim('float-anim'), 300);
+            const enemyAction = () => {
+                const move = enemyNextMove;
+                
+                // 敵人攻擊動畫
+                setEAnim('enemy-attack');
+                setTimeout(() => setEAnim(''), 300);
 
                 setTimeout(() => {
-                    if (move.val > 0) {
-                        setPAnim('damage-anim');
-                        setTimeout(() => setPAnim('float-anim'), 500);
-                        
-                        let dmg = move.val;
-                        if (pShield > 0) {
-                            if (pShield >= dmg) {
-                                setPShield(s => s - dmg);
-                                dmg = 0;
-                                showFloater("格擋!", 'shield');
-                            } else {
-                                dmg -= pShield;
-                                setPShield(0);
-                            }
-                        }
-                        
-                        if (dmg > 0) {
-                            setPHP(h => Math.max(0, h - dmg));
-                            showFloater(`-${dmg}`, 'damage');
-                        }
-                    } else {
-                        showFloater("...", 'heal');
+                    if (move.dmg > 0) {
+                        setPHP(prev => Math.max(0, prev - move.dmg));
+                        setPAnim('shake');
+                        showFloater(`-${move.dmg}`, 'damage');
+                        setTimeout(() => setPAnim(''), 500);
                     }
-                }, 200);
+                    if (move.heal) {
+                        setEHP(prev => Math.min(MAX_HP_ENEMY, prev + move.heal));
+                        showFloater(`+${move.heal}`, 'heal');
+                    }
+                }, 150);
 
                 setMsg(move.text);
 
-                if (pHP - (move.val > 0 ? move.val : 0) <= 0) { // 簡易檢查
+                // 檢查失敗
+                if (pHP - move.dmg <= 0) {
                     setTimeout(() => setScene('lose'), 1000);
                     return;
                 }
 
+                // 回到玩家回合
                 setTimeout(() => {
                     setTurn('player');
-                    setPEnergy(MAX_ENERGY);
-                    setPShield(0);
-                    setMsg("你的回合！能量已恢復。");
-                    planEnemyMove();
+                    setEnergyAttachedThisTurn(false);
+                    setSupporterUsedThisTurn(false);
+                    planEnemyAction();
+                    
+                    // 回合開始抽牌
+                    setMsg("你的回合！抽1張卡。");
+                    drawCard(1);
+                    
                 }, 2000);
             };
 
-            // 渲染輔助
-            const HealthBar = ({ current, max, isPlayer }) => (
-                <div className="w-48 md:w-64 bg-slate-700 rounded-full h-4 border-2 border-white relative overflow-hidden shadow-lg">
-                    <div 
-                        className={`h-full transition-all duration-500 ${isPlayer ? 'bg-green-400' : 'bg-red-500'}`} 
-                        style={{ width: `${(current/max)*100}%` }}
-                    />
-                    <div className="absolute top-0 w-full text-center text-[10px] font-bold text-white leading-3 drop-shadow-md">
-                        {current}/{max}
-                    </div>
-                </div>
-            );
+            // --- 渲染組件 ---
+            
+            // 手牌渲染
+            const renderHandCard = (card, index) => {
+                const isEnergy = card.type === 'energy';
+                const isTrainer = card.type === 'item' || card.type === 'supporter';
+                
+                // 判斷是否可用
+                let disabled = turn !== 'player';
+                if (isEnergy && energyAttachedThisTurn) disabled = true;
+                if (card.type === 'supporter' && supporterUsedThisTurn) disabled = true;
 
-            // --- 畫面 ---
+                return (
+                    <div 
+                        key={index}
+                        onClick={() => {
+                            if (disabled) return;
+                            if (isEnergy) attachEnergy(index);
+                            if (isTrainer) playTrainer(card, index);
+                        }}
+                        className={`
+                            flex-shrink-0 w-24 h-36 md:w-28 md:h-40 rounded-lg border-2 border-white 
+                            flex flex-col p-2 relative cursor-pointer card-shadow select-none
+                            ${card.color} text-white
+                            ${disabled ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:-translate-y-4'}
+                        `}
+                    >
+                        <div className="text-[10px] font-bold mb-1 opacity-80">
+                            {isEnergy ? "能量" : card.type === 'item' ? "物品" : "支援者"}
+                        </div>
+                        <div className="font-bold text-sm leading-tight mb-2">{card.name}</div>
+                        <div className="flex-1 flex items-center justify-center text-2xl">
+                            {isEnergy ? "⚡" : "🎒"}
+                        </div>
+                        <div className="text-[10px] leading-tight opacity-90">
+                            {card.desc}
+                        </div>
+                    </div>
+                );
+            };
+
+            // --- 畫面渲染 ---
 
             if (scene === 'menu') {
                 return (
-                    <div className="h-full flex flex-col items-center justify-center bg-slate-900 text-white p-4 battle-bg">
-                        <div className="bg-white/90 p-8 rounded-2xl shadow-2xl text-center text-slate-800 backdrop-blur-sm">
-                            <h1 className="text-4xl font-bold mb-2">寶可夢健康大戰</h1>
-                            <p className="mb-6 text-slate-600">怪力 vs 卡比獸</p>
+                    <div className="h-full flex flex-col items-center justify-center battle-bg relative">
+                        <div className="bg-white/90 p-8 rounded-2xl shadow-2xl text-center max-w-md mx-4 backdrop-blur-sm">
+                            <h1 className="text-4xl font-bold text-slate-800 mb-2">寶可夢健康大戰</h1>
+                            <p className="text-slate-500 mb-6">PTCG 規則特別版</p>
                             <div className="flex justify-center gap-8 mb-8">
-                                <img src={IMG_PLAYER} className="w-24 h-24 animate-bounce" />
-                                <span className="text-4xl font-bold self-center">VS</span>
-                                <img src={IMG_ENEMY} className="w-24 h-24 animate-pulse" />
+                                <img src={IMG_PLAYER} className="w-24 h-24 animate-bounce" alt="怪力" />
+                                <span className="text-4xl font-bold text-slate-400 self-center">VS</span>
+                                <img src={IMG_ENEMY} className="w-24 h-24 animate-pulse" alt="卡比獸" />
                             </div>
                             <button 
-                                onClick={() => setScene('battle')}
-                                className="bg-red-600 hover:bg-red-700 text-white text-xl font-bold py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105"
+                                onClick={startBattle}
+                                className="w-full bg-red-600 hover:bg-red-700 text-white text-xl font-bold py-3 px-8 rounded-full shadow-lg transition transform hover:scale-105"
                             >
-                                開始戰鬥
+                                開始對戰
                             </button>
+                            <div className="mt-4 text-xs text-slate-500 text-left">
+                                <p>規則說明：</p>
+                                <ul className="list-disc pl-4 mt-1">
+                                    <li>回合開始抽1張卡。</li>
+                                    <li>每回合可由手牌附著1張能量。</li>
+                                    <li>物品卡不限使用次數，支援者卡每回合限1張。</li>
+                                    <li>累積足夠能量使用怪力的招式攻擊！</li>
+                                </ul>
+                            </div>
                         </div>
                     </div>
                 );
             }
-
-            if (scene === 'win') {
-                return (
-                    <div className="h-full flex flex-col items-center justify-center bg-yellow-400 text-white p-4">
-                        <h1 className="text-6xl font-bold mb-4 drop-shadow-lg">勝利！</h1>
-                        <img src={IMG_PLAYER} className="w-48 h-48 mb-4 float-anim" />
-                        <p className="text-2xl font-bold mb-8 text-slate-800">你成功擊敗了代謝症候群！</p>
-                        <button onClick={() => setScene('menu')} className="bg-white text-yellow-600 font-bold py-3 px-8 rounded-full shadow-lg">
-                            再玩一次
-                        </button>
-                    </div>
-                );
-            }
-
-            if (scene === 'lose') {
-                return (
-                    <div className="h-full flex flex-col items-center justify-center bg-slate-800 text-white p-4">
-                        <h1 className="text-6xl font-bold mb-4">敗北...</h1>
-                        <img src={IMG_ENEMY} className="w-48 h-48 mb-4 float-anim" />
-                        <p className="text-xl mb-8">被懶惰打敗了，明天再運動吧...</p>
-                        <button onClick={() => setScene('menu')} className="bg-white text-slate-800 font-bold py-3 px-8 rounded-full shadow-lg">
-                            不！現在就重來！
+            
+            if (scene === 'win' || scene === 'lose') {
+                 return (
+                    <div className={`h-full flex flex-col items-center justify-center p-4 ${scene === 'win' ? 'bg-yellow-100' : 'bg-slate-900'}`}>
+                        <h1 className={`text-6xl font-bold mb-4 ${scene === 'win' ? 'text-yellow-600' : 'text-slate-200'}`}>
+                            {scene === 'win' ? '勝利！' : '敗北...'}
+                        </h1>
+                        <img src={scene === 'win' ? IMG_PLAYER : IMG_ENEMY} className="w-48 h-48 mb-8 animate-bounce" />
+                        <button 
+                            onClick={() => setScene('menu')} 
+                            className="bg-white text-slate-800 font-bold py-3 px-8 rounded-full shadow-lg text-xl hover:scale-105 transition"
+                        >
+                            回到主選單
                         </button>
                     </div>
                 );
@@ -349,108 +465,132 @@
                     
                     {/* 浮動文字層 */}
                     {floater && (
-                        <div className={`absolute z-50 text-6xl font-black pop-text ${floater.color} drop-shadow-lg`}
+                        <div className={`absolute z-50 text-5xl font-black pop-text ${floater.color}`}
                              style={{ 
-                                 top: floater.target === 'enemy' ? '20%' : '55%', 
+                                 top: floater.target === 'enemy' ? '25%' : '55%', 
                                  left: '50%', 
                                  transform: 'translate(-50%, -50%)',
-                                 textShadow: '2px 2px 0 #000'
                              }}>
                             {floater.text}
                         </div>
                     )}
 
-                    {/* 頂部：敵人 (卡比獸) */}
-                    <div className="flex-1 flex flex-col items-center pt-8 relative">
-                        <div className={`transition-all duration-300 ${eAnim}`}>
-                            <img src={IMG_ENEMY} className="w-40 h-40 md:w-56 md:h-56 drop-shadow-2xl filter brightness-110" />
-                        </div>
-                        
-                        {/* 敵人血條 UI */}
-                        <div className="bg-slate-800/80 p-3 rounded-xl mt-[-20px] z-10 backdrop-blur text-white flex flex-col items-center shadow-xl border border-slate-600">
-                            <div className="font-bold text-lg mb-1 flex items-center gap-2">
-                                <span>卡比獸 (Lv.50)</span>
-                                {nextEnemyMove && <span className="text-xs bg-red-500 px-2 rounded">!</span>}
-                            </div>
-                            <HealthBar current={eHP} max={MAX_HP_ENEMY} isPlayer={false} />
-                            <div className="text-xs text-slate-300 mt-1">
-                                意圖: {nextEnemyMove ? nextEnemyMove.name : '...'}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 中間：對話框 */}
-                    <div className="h-16 md:h-20 bg-slate-900/80 border-y-2 border-slate-500 flex items-center justify-center px-4 backdrop-blur-sm z-20">
-                        <p className="text-white text-lg md:text-xl font-bold tracking-wide fade-in">
-                            {msg}
-                        </p>
-                    </div>
-
-                    {/* 底部：玩家 (怪力) 與 卡牌 */}
-                    <div className="flex-1 flex flex-col justify-end pb-4 relative">
-                        
-                        {/* 玩家圖像與狀態 */}
-                        <div className="absolute bottom-48 left-4 md:left-20 flex items-end gap-4 z-0">
-                             <div className={`transition-all duration-300 ${pAnim}`}>
-                                <img src={IMG_PLAYER} className="w-32 h-32 md:w-48 md:h-48 drop-shadow-2xl" />
-                            </div>
-                            <div className="bg-slate-800/80 p-3 rounded-xl mb-8 text-white shadow-xl border border-slate-600">
-                                <div className="font-bold text-lg mb-1">怪力 (你)</div>
-                                <HealthBar current={pHP} max={MAX_HP_PLAYER} isPlayer={true} />
-                                <div className="flex gap-2 mt-2">
-                                    <div className="flex items-center text-yellow-400 font-bold">
-                                        <span className="text-xs mr-1">⚡能量</span> 
-                                        {[...Array(MAX_ENERGY)].map((_, i) => (
-                                            <div key={i} className={`w-3 h-3 rounded-full mx-0.5 ${i < pEnergy ? 'bg-yellow-400' : 'bg-gray-600'}`}></div>
-                                        ))}
-                                    </div>
-                                    {pShield > 0 && <div className="text-blue-400 font-bold text-sm">🛡️ {pShield}</div>}
+                    {/* 上方區域：敵人 (30%) */}
+                    <div className="flex-none h-[30%] relative flex items-center justify-center">
+                        <div className={`relative transition-transform duration-200 ${eAnim}`}>
+                            <img src={IMG_ENEMY} className="w-32 h-32 md:w-48 md:h-48 drop-shadow-xl filter brightness-110" alt="敵人" />
+                            {/* 敵人血條 */}
+                            <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 w-48 bg-slate-800/80 rounded-lg p-2 text-white text-center shadow-lg border border-slate-600">
+                                <div className="text-sm font-bold flex justify-between px-2">
+                                    <span>卡比獸</span>
+                                    <span>{eHP}/{MAX_HP_ENEMY}</span>
+                                </div>
+                                <div className="w-full bg-slate-600 h-2 rounded-full mt-1 overflow-hidden">
+                                    <div className="bg-red-500 h-full transition-all duration-500" style={{width: `${(eHP/MAX_HP_ENEMY)*100}%`}}></div>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        {/* 手牌區 */}
-                        <div className="h-40 md:h-48 flex items-center px-4 gap-2 overflow-x-auto z-10 pb-2">
-                            {hand.map((card, idx) => (
-                                <div 
-                                    key={idx}
-                                    onClick={() => playerAction(card)}
-                                    className={`
-                                        flex-shrink-0 w-28 h-40 md:w-32 md:h-44 rounded-lg shadow-2xl border-2 border-white/50 
-                                        flex flex-col p-2 text-white cursor-pointer relative transform transition hover:-translate-y-4 hover:scale-105
-                                        ${card.color}
-                                        ${(turn !== 'player' || pEnergy < card.cost) ? 'opacity-50 grayscale cursor-not-allowed' : ''}
-                                    `}
-                                >
-                                    <div className="flex justify-between items-center mb-1">
-                                        <div className="font-bold text-xs truncate">{card.name}</div>
-                                        <div className="bg-white text-black font-bold rounded-full w-5 h-5 flex items-center justify-center text-xs">
-                                            {card.cost}
+                    {/* 訊息欄 (不擋住畫面) */}
+                    <div className="flex-none h-[10%] flex items-center justify-center z-20">
+                         <div className="bg-slate-900/80 text-white px-6 py-2 rounded-full backdrop-blur-sm border border-slate-500 shadow-lg text-sm md:text-base animate-pulse">
+                            {msg}
+                        </div>
+                    </div>
+
+                    {/* 中間區域：玩家寶可夢 & 狀態 (35%) */}
+                    <div className="flex-none h-[35%] relative flex items-center justify-center px-4">
+                        <div className="flex w-full max-w-4xl justify-between items-end">
+                            
+                            {/* 玩家寶可夢圖案 */}
+                            <div className={`relative transition-transform duration-200 ${pAnim}`}>
+                                <img src={IMG_PLAYER} className="w-40 h-40 md:w-56 md:h-56 drop-shadow-2xl" alt="玩家" />
+                                
+                                {/* 玩家血條與能量 */}
+                                <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 w-56 bg-white/90 rounded-lg p-2 text-slate-800 shadow-xl border-2 border-slate-200">
+                                    <div className="flex justify-between items-end mb-1">
+                                        <span className="font-bold text-lg">怪力</span>
+                                        <span className={`font-bold ${pHP < 50 ? 'text-red-500' : 'text-green-600'}`}>{pHP}/{MAX_HP_PLAYER}</span>
+                                    </div>
+                                    <div className="w-full bg-slate-300 h-3 rounded-full overflow-hidden mb-2">
+                                        <div className="bg-green-500 h-full transition-all duration-500" style={{width: `${(pHP/MAX_HP_PLAYER)*100}%`}}></div>
+                                    </div>
+                                    {/* 能量顯示 */}
+                                    <div className="flex items-center gap-1 bg-slate-100 rounded px-2 py-1">
+                                        <span className="text-xs font-bold text-slate-500">已附能量:</span>
+                                        <div className="flex gap-1">
+                                            {[...Array(pEnergy)].map((_, i) => (
+                                                <span key={i} className="w-4 h-4 rounded-full bg-orange-500 border border-white shadow-sm"></span>
+                                            ))}
+                                            {pEnergy === 0 && <span className="text-xs text-slate-400">無</span>}
                                         </div>
                                     </div>
-                                    <div className="flex-1 flex items-center justify-center">
-                                        <Icon name={card.icon} className="w-10 h-10 text-white/90" />
-                                    </div>
-                                    <div className="text-[10px] bg-black/20 p-1 rounded leading-tight">
-                                        {card.desc}
-                                    </div>
                                 </div>
-                            ))}
+                            </div>
+
+                            {/* 招式表 (固定在右側) */}
+                            <div className="bg-white/90 p-3 rounded-xl shadow-xl border-2 border-slate-200 w-48 md:w-64 flex flex-col gap-2 mb-4">
+                                <div className="text-xs text-slate-400 font-bold mb-1 text-center">--- 招式列表 ---</div>
+                                {PLAYER_MOVES.map(move => (
+                                    <button 
+                                        key={move.id}
+                                        onClick={() => useMove(move)}
+                                        disabled={turn !== 'player' || pEnergy < move.cost}
+                                        className={`
+                                            w-full text-left p-2 rounded-lg border transition-all relative overflow-hidden group
+                                            ${pEnergy >= move.cost 
+                                                ? 'bg-orange-50 hover:bg-orange-100 border-orange-200 cursor-pointer' 
+                                                : 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed'}
+                                        `}
+                                    >
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="font-bold text-slate-800">{move.name}</span>
+                                            <span className="text-lg font-bold text-slate-700">{move.damage}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1 text-xs text-slate-500">
+                                            <div className="flex">
+                                                {[...Array(move.cost)].map((_, i) => (
+                                                    <span key={i} className="w-3 h-3 rounded-full bg-orange-500 inline-block mr-0.5"></span>
+                                                ))}
+                                            </div>
+                                            <span>能量</span>
+                                        </div>
+                                    </button>
+                                ))}
+                                {damageBuff > 0 && (
+                                    <div className="text-center text-xs font-bold text-red-500 animate-pulse">
+                                        目前傷害 +{damageBuff}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-
-                        {/* 結束回合按鈕 (如果沒有手牌或能量) */}
-                        <button 
-                            onClick={endTurn}
-                            disabled={turn !== 'player'}
-                            className={`
-                                absolute bottom-4 right-4 z-20 px-6 py-2 rounded-lg font-bold shadow-lg border-2 border-white
-                                ${turn === 'player' ? 'bg-yellow-500 hover:bg-yellow-600 text-slate-900' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}
-                            `}
-                        >
-                            {turn === 'player' ? '結束回合' : '對手行動中'}
-                        </button>
-
                     </div>
+
+                    {/* 底部區域：手牌 (25%) */}
+                    <div className="flex-none h-[25%] bg-slate-900/50 backdrop-blur-md border-t border-slate-600 flex flex-col relative">
+                        <div className="flex justify-between items-center px-4 py-1">
+                            <div className="text-xs text-white/70 font-bold">
+                                手牌: {hand.length} | 牌庫: {deck.length} | 棄牌: {discardPile}
+                            </div>
+                            <button 
+                                onClick={endPlayerTurn}
+                                disabled={turn !== 'player'}
+                                className={`
+                                    px-4 py-1 rounded text-xs font-bold
+                                    ${turn === 'player' ? 'bg-yellow-500 hover:bg-yellow-600 text-slate-900' : 'bg-slate-700 text-slate-400'}
+                                `}
+                            >
+                                結束回合
+                            </button>
+                        </div>
+                        
+                        {/* 手牌列表 (水平滾動) */}
+                        <div className="flex-1 flex items-center gap-2 px-4 overflow-x-auto no-scrollbar pb-2">
+                            {hand.map((card, index) => renderHandCard(card, index))}
+                        </div>
+                    </div>
+
                 </div>
             );
         };
