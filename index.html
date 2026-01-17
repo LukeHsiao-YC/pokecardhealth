@@ -68,7 +68,7 @@
         .attack-anim-left { animation: lungeLeft 0.2s forwards; }
         @keyframes lungeLeft { 0% { transform: translateX(0); } 50% { transform: translateX(-60px); } 100% { transform: translateX(0); } }
 
-        /* 衛教視窗 */
+        /* 衛教視窗動畫 */
         .tip-box { animation: slideInTip 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
         @keyframes slideInTip { from { transform: translateX(100%) scale(0.8); opacity: 0; } to { transform: translateX(0) scale(1); opacity: 1; } }
 
@@ -128,31 +128,43 @@
             }
         };
 
-        // 敵人資料 (Enemies)
+        // 敵人資料 (Enemies) - 已強化數據並加入健康危害 Tip
         const ENEMIES = [
             {
-                id: 'sedentary', name: "請假王", title: "久坐魔人", type: 'normal', maxHp: 150,
+                id: 'sedentary', name: "請假王", title: "久坐魔人", type: 'normal', maxHp: 200, // HP 150 -> 200
                 img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/289.png",
                 weakness: 'fighting',
-                moves: [{ name: "哈欠", dmg: 10 }, { name: "偷懶重壓", dmg: 40 }]
+                moves: [
+                    { name: "哈欠", dmg: 20, tip: "久坐不動會降低胰島素敏感度，大幅增加第2型糖尿病的風險！" }, 
+                    { name: "偷懶重壓", dmg: 50, tip: "長期缺乏運動會導致肌肉流失，基礎代謝率下降，更容易發胖。" }
+                ]
             },
             {
-                id: 'junkfood', name: "藏飽栗鼠", title: "零食囤積者", type: 'normal', maxHp: 160,
+                id: 'junkfood', name: "藏飽栗鼠", title: "零食囤積者", type: 'normal', maxHp: 220, // HP 160 -> 220
                 img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/820.png",
                 weakness: 'fighting',
-                moves: [{ name: "大快朵頤", dmg: 20 }, { name: "種子機關槍", dmg: 50 }]
+                moves: [
+                    { name: "大快朵頤", dmg: 30, tip: "高熱量、高脂肪飲食若無足夠運動消耗，多餘熱量會迅速轉化為內臟脂肪！" },
+                    { name: "種子機關槍", dmg: 60, tip: "加工食品通常含有過量的鈉，長期攝取容易引發高血壓與腎臟負擔。" }
+                ]
             },
             {
-                id: 'sugary', name: "怖思壺", title: "糖分幽靈", type: 'ghost', maxHp: 140,
+                id: 'sugary', name: "怖思壺", title: "糖分幽靈", type: 'ghost', maxHp: 180, // HP 140 -> 180
                 img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/855.png",
-                weakness: 'water', // 設定水剋糖 (稀釋)
-                moves: [{ name: "驚嚇", dmg: 30 }, { name: "紅茶砲", dmg: 60 }]
+                weakness: 'water', 
+                moves: [
+                    { name: "驚嚇", dmg: 40, tip: "含糖飲料會造成血糖劇烈波動，導致情緒不穩與注意力下降。" },
+                    { name: "紅茶砲", dmg: 70, tip: "過量攝取精緻糖是導致脂肪肝、痛風與代謝症候群的主要元兇之一！" }
+                ]
             },
             {
-                id: 'boss', name: "卡比獸", title: "代謝症候群", type: 'normal', maxHp: 250,
+                id: 'boss', name: "卡比獸", title: "代謝症候群", type: 'normal', maxHp: 350, // HP 250 -> 350 (大幅強化)
                 img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/143.png",
                 weakness: 'fighting',
-                moves: [{ name: "泰山壓頂", dmg: 60 }, { name: "睡覺", dmg: 0, heal: 50 }]
+                moves: [
+                    { name: "泰山壓頂", dmg: 90, tip: "體重過重會增加膝關節的負擔，加速關節退化與疼痛。" },
+                    { name: "睡覺", dmg: 0, heal: 80, tip: "肥胖容易引發睡眠呼吸中止症，嚴重影響睡眠品質並增加心血管疾病風險。" }
+                ]
             }
         ];
 
@@ -214,6 +226,7 @@
             // UI 狀態
             const [msg, setMsg] = useState("");
             const [floater, setFloater] = useState(null);
+            // tip 現在是物件 { text: string, type: 'good' | 'bad' }
             const [tip, setTip] = useState(null);
             const [pAnim, setPAnim] = useState('');
             const [eAnim, setEAnim] = useState('');
@@ -397,7 +410,9 @@
                 }, 150);
 
                 setMsg(`${activePkmn.name} 使用了 ${move.name}！`);
-                setTip(move.tip);
+                
+                // 設定玩家的健康小知識 (Good Tip)
+                setTip({ text: move.tip, type: 'good' });
 
                 if (enemyHp - damage <= 0) {
                     setTimeout(handleWin, 1500);
@@ -430,6 +445,9 @@
                 }, 150);
 
                 setMsg(`${enemyProto.name} 使用了 ${move.name}！`);
+                
+                // 設定敵人的健康危害警示 (Bad Tip)
+                setTip({ text: move.tip, type: 'bad' });
 
                 if (activePkmn.currentHp - (move.dmg || 0) <= 0) {
                     setTimeout(handleFaint, 1500);
@@ -484,9 +502,9 @@
                             </div>
                             <p className="text-slate-600 mb-8 text-sm text-left bg-slate-100 p-4 rounded-lg">
                                 💡 新增機制：<br/>
-                                1. <b>備戰區</b>：抽卡獲得新夥伴，隨時交換戰術。<br/>
-                                2. <b>屬性相剋</b>：格鬥剋一般，水剋糖分！<br/>
-                                3. <b>先機球</b>：使用物品卡直接搜尋夥伴！
+                                1. <b>危害警示</b>：敵人攻擊時顯示健康危害！<br/>
+                                2. <b>難度提升</b>：敵人血量與傷害大幅增加。<br/>
+                                3. <b>屬性相剋</b>：善用相剋屬性造成雙倍傷害！
                             </p>
                             <button onClick={initGame} className="w-full bg-red-600 hover:bg-red-700 text-white text-xl font-bold py-4 px-8 rounded-2xl shadow-lg transition transform hover:scale-105">
                                 開始冒險
@@ -532,14 +550,17 @@
                         </div>
                     )}
 
-                    {/* 衛教提示窗 */}
+                    {/* 衛教/危害提示窗 */}
                     {tip && (
-                        <div className="absolute top-4 right-4 z-40 max-w-xs bg-yellow-50 border-l-4 border-yellow-500 p-4 shadow-lg rounded tip-box">
+                        <div className={`absolute top-4 right-4 z-40 max-w-xs p-4 shadow-lg rounded tip-box border-l-4 
+                            ${tip.type === 'bad' ? 'bg-red-50 border-red-600' : 'bg-yellow-50 border-yellow-500'}`}>
                             <div className="flex items-start">
-                                <span className="text-2xl mr-2">💡</span>
+                                <span className="text-2xl mr-2">{tip.type === 'bad' ? '⚠️' : '💡'}</span>
                                 <div>
-                                    <h4 className="font-bold text-yellow-800 text-xs uppercase mb-1">Health Tip</h4>
-                                    <p className="text-sm text-slate-700 leading-tight">{tip}</p>
+                                    <h4 className={`font-bold text-xs uppercase mb-1 ${tip.type === 'bad' ? 'text-red-800' : 'text-yellow-800'}`}>
+                                        {tip.type === 'bad' ? '健康危害警示' : '健康小知識'}
+                                    </h4>
+                                    <p className="text-sm text-slate-700 leading-tight">{tip.text}</p>
                                 </div>
                             </div>
                         </div>
