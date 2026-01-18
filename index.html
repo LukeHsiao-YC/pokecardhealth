@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>寶可夢健康大戰 (進化版)</title>
+    <title>寶可夢健康大戰 (進化+問答版)</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React & ReactDOM -->
@@ -58,6 +58,10 @@
             100% { opacity: 0; transform:translate(-50%, -150%) scale(1.5); }
         }
 
+        /* 問答視窗動畫 */
+        .quiz-modal { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
         /* 隱藏滾動條 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -71,72 +75,30 @@
 
         // --- 資料庫 ---
 
-        // 寶可夢資料 (包含基礎與進化型態)
+        // 健康問答題目庫
+        const QUIZ_DATABASE = [
+            { q: "下列哪種食物富含膳食纖維，有助於腸道健康？", options: ["炸雞排", "燕麥", "珍珠奶茶"], ans: 1 },
+            { q: "成人建議每天至少喝多少水？", options: ["500cc", "體重 x 30cc", "5000cc"], ans: 1 },
+            { q: "下列何者是優質蛋白質的來源？", options: ["含糖飲料", "雞胸肉", "薯條"], ans: 1 },
+            { q: "久坐超過多久建議起來活動筋骨？", options: ["30分鐘", "5小時", "不用起來"], ans: 0 },
+            { q: "睡前滑手機主要會受到什麼影響導致睡眠品質下降？", options: ["藍光抑制褪黑激素", "手機沒電", "手指痠痛"], ans: 0 },
+            { q: "下列哪種運動屬於有氧運動，能有效燃脂？", options: ["慢跑", "舉重", "伏地挺身"], ans: 0 },
+            { q: "減重時，飲食控制與運動哪個重要？", options: ["只靠運動", "只靠節食", "兩者並重"], ans: 2 },
+            { q: "高鈉(太鹹)飲食容易導致什麼疾病？", options: ["高血壓", "近視", "蛀牙"], ans: 0 },
+            { q: "想要長肌肉，運動後應補充？", options: ["蛋白質與碳水化合物", "只喝水", "不吃東西"], ans: 0 },
+            { q: "每週建議進行至少多少分鐘的中等強度運動？", options: ["10分鐘", "150分鐘", "600分鐘"], ans: 1 },
+        ];
+
+        // 寶可夢資料
         const POKEMON_DB = {
-            // 格鬥系進化鏈
-            machop: {
-                id: 'machop', name: '腕力', type: 'fighting', stage: 'basic', maxHp: 70,
-                img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/66.png",
-                retreatCost: 1,
-                moves: [{ name: "手刀", cost: 1, dmg: 20, tip: "基礎肌力訓練，適合初學者。" }]
-            },
-            machamp: {
-                id: 'machamp', name: '怪力', type: 'fighting', stage: 'evolution', evolvesFrom: 'machop', maxHp: 180,
-                img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/68.png",
-                retreatCost: 2,
-                moves: [
-                    { name: "怪力無雙", cost: 2, dmg: 60, tip: "進階重量訓練，大幅提升肌肉量與代謝！" },
-                    { name: "地獄翻滾", cost: 3, dmg: 120, tip: "核心肌群的終極展現，燃燒脂肪效果絕佳。" }
-                ]
-            },
-            // 格鬥系進化鏈 2
-            riolu: {
-                id: 'riolu', name: '利歐路', type: 'fighting', stage: 'basic', maxHp: 60,
-                img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/447.png",
-                retreatCost: 1,
-                moves: [{ name: "電光一閃", cost: 1, dmg: 10, tip: "敏捷度訓練，保持身體靈活。" }]
-            },
-            lucario: {
-                id: 'lucario', name: '路卡利歐', type: 'fighting', stage: 'evolution', evolvesFrom: 'riolu', maxHp: 140,
-                img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/448.png",
-                retreatCost: 1,
-                moves: [
-                    { name: "發勁", cost: 1, dmg: 40, tip: "專注力與呼吸調節，類似瑜珈或太極。" },
-                    { name: "波導彈", cost: 2, dmg: 90, tip: "高強度間歇運動(HIIT)，短時間提升心肺功能。" }
-                ]
-            },
-            // 火系進化鏈 (有氧)
-            scorbunny: {
-                id: 'scorbunny', name: '炎兔兒', type: 'fire', stage: 'basic', maxHp: 60,
-                img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/813.png",
-                retreatCost: 1,
-                moves: [{ name: "火花", cost: 1, dmg: 20, tip: "暖身運動，讓身體熱起來。" }]
-            },
-            cinderace: {
-                id: 'cinderace', name: '閃焰王牌', type: 'fire', stage: 'evolution', evolvesFrom: 'scorbunny', maxHp: 150,
-                img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/815.png",
-                retreatCost: 0, // 撤退免費
-                moves: [
-                    { name: "火焰球", cost: 2, dmg: 80, tip: "踢足球等團隊運動，培養協調性與體能。" },
-                    { name: "極巨火球", cost: 3, dmg: 140, tip: "高強度有氧，燃燒內臟脂肪！" }
-                ]
-            },
-            // 水系進化鏈 (代謝)
-            sobble: {
-                id: 'sobble', name: '淚眼蜥', type: 'water', stage: 'basic', maxHp: 50,
-                img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/816.png",
-                retreatCost: 1,
-                moves: [{ name: "水槍", cost: 1, dmg: 10, tip: "記得多喝水，促進身體循環。" }]
-            },
-            inteleon: {
-                id: 'inteleon', name: '千面避役', type: 'water', stage: 'evolution', evolvesFrom: 'sobble', maxHp: 130,
-                img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/818.png",
-                retreatCost: 1,
-                moves: [
-                    { name: "狙擊", cost: 1, dmg: 50, tip: "精準攝取水分與電解質，不喝含糖飲料。" },
-                    { name: "高壓水炮", cost: 2, dmg: 100, tip: "大量排汗後的水分補充至關重要。" }
-                ]
-            }
+            machop: { id: 'machop', name: '腕力', type: 'fighting', stage: 'basic', maxHp: 70, img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/66.png", retreatCost: 1, moves: [{ name: "手刀", cost: 1, dmg: 20, tip: "基礎肌力訓練，適合初學者。" }] },
+            machamp: { id: 'machamp', name: '怪力', type: 'fighting', stage: 'evolution', evolvesFrom: 'machop', maxHp: 180, img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/68.png", retreatCost: 2, moves: [{ name: "怪力無雙", cost: 2, dmg: 60, tip: "進階重量訓練，大幅提升肌肉量與代謝！" }, { name: "地獄翻滾", cost: 3, dmg: 120, tip: "核心肌群的終極展現，燃燒脂肪效果絕佳。" }] },
+            riolu: { id: 'riolu', name: '利歐路', type: 'fighting', stage: 'basic', maxHp: 60, img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/447.png", retreatCost: 1, moves: [{ name: "電光一閃", cost: 1, dmg: 10, tip: "敏捷度訓練，保持身體靈活。" }] },
+            lucario: { id: 'lucario', name: '路卡利歐', type: 'fighting', stage: 'evolution', evolvesFrom: 'riolu', maxHp: 140, img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/448.png", retreatCost: 1, moves: [{ name: "發勁", cost: 1, dmg: 40, tip: "專注力與呼吸調節，類似瑜珈或太極。" }, { name: "波導彈", cost: 2, dmg: 90, tip: "高強度間歇運動(HIIT)，短時間提升心肺功能。" }] },
+            scorbunny: { id: 'scorbunny', name: '炎兔兒', type: 'fire', stage: 'basic', maxHp: 60, img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/813.png", retreatCost: 1, moves: [{ name: "火花", cost: 1, dmg: 20, tip: "暖身運動，讓身體熱起來。" }] },
+            cinderace: { id: 'cinderace', name: '閃焰王牌', type: 'fire', stage: 'evolution', evolvesFrom: 'scorbunny', maxHp: 150, img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/815.png", retreatCost: 0, moves: [{ name: "火焰球", cost: 2, dmg: 80, tip: "踢足球等團隊運動，培養協調性與體能。" }, { name: "極巨火球", cost: 3, dmg: 140, tip: "高強度有氧，燃燒內臟脂肪！" }] },
+            sobble: { id: 'sobble', name: '淚眼蜥', type: 'water', stage: 'basic', maxHp: 50, img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/816.png", retreatCost: 1, moves: [{ name: "水槍", cost: 1, dmg: 10, tip: "記得多喝水，促進身體循環。" }] },
+            inteleon: { id: 'inteleon', name: '千面避役', type: 'water', stage: 'evolution', evolvesFrom: 'sobble', maxHp: 130, img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/818.png", retreatCost: 1, moves: [{ name: "狙擊", cost: 1, dmg: 50, tip: "精準攝取水分與電解質，不喝含糖飲料。" }, { name: "高壓水炮", cost: 2, dmg: 100, tip: "大量排汗後的水分補充至關重要。" }] }
         };
 
         const ENEMIES = [
@@ -146,26 +108,28 @@
             { id: 'boss', name: "卡比獸", title: "代謝症候群", type: 'normal', maxHp: 350, img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/143.png", weakness: 'fighting', moves: [{name:"泰山壓頂", dmg:90, tip:"體重過重會加速膝關節退化。"}, {name:"睡覺", dmg:0, heal:80, tip:"肥胖容易引發睡眠呼吸中止症。"}] }
         ];
 
-        // 牌組構成 (更像 PTCG)
+        // 牌組構成 (增加物品卡比例)
         const BASE_DECK = [
-            ...Array(14).fill({ type: 'energy', name: "基本能量" }),
-            // 基礎寶可夢 (各3張)
+            // 能量卡 (12張 - 減少)
+            ...Array(12).fill({ type: 'energy', name: "基本能量" }),
+            // 基礎寶可夢
             ...Array(3).fill({ type: 'pokemon', protoId: 'machop' }),
             ...Array(3).fill({ type: 'pokemon', protoId: 'riolu' }),
             ...Array(3).fill({ type: 'pokemon', protoId: 'scorbunny' }),
             ...Array(3).fill({ type: 'pokemon', protoId: 'sobble' }),
-            // 進化寶可夢 (各2張)
+            // 進化寶可夢
             ...Array(2).fill({ type: 'pokemon', protoId: 'machamp' }),
             ...Array(2).fill({ type: 'pokemon', protoId: 'lucario' }),
             ...Array(2).fill({ type: 'pokemon', protoId: 'cinderace' }),
             ...Array(2).fill({ type: 'pokemon', protoId: 'inteleon' }),
-            // 訓練家
-            ...Array(2).fill({ type: 'item', effect: 'potion', name: "傷藥", val: 50 }),
-            ...Array(2).fill({ type: 'item', effect: 'switch', name: "寶可夢交替" }),
-            ...Array(2).fill({ type: 'item', effect: 'ball', name: "先機球", desc: "找基礎寶可夢" }),
-            ...Array(2).fill({ type: 'item', effect: 'incense', name: "進化薰香", desc: "找進化寶可夢" }),
-            ...Array(3).fill({ type: 'supporter', effect: 'research', name: "博士的研究", val: 4 }),
-            ...Array(2).fill({ type: 'supporter', effect: 'boss', name: "老大的指令", val: 20 }),
+            // 訓練家 - 物品卡 (增加數量)
+            ...Array(4).fill({ type: 'item', effect: 'potion', name: "傷藥", val: 50, desc: "恢復50HP" }), // 2->4
+            ...Array(3).fill({ type: 'item', effect: 'switch', name: "寶可夢交替", desc: "交換戰鬥寶可夢" }), // 2->3
+            ...Array(4).fill({ type: 'item', effect: 'ball', name: "先機球", desc: "找基礎寶可夢" }), // 2->4
+            ...Array(3).fill({ type: 'item', effect: 'incense', name: "進化薰香", desc: "找進化寶可夢" }), // 2->3
+            // 支援者
+            ...Array(3).fill({ type: 'supporter', effect: 'research', name: "博士的研究", val: 4, desc: "棄牌抽4張" }),
+            ...Array(2).fill({ type: 'supporter', effect: 'boss', name: "老大的指令", val: 20, desc: "強制對手受傷" }),
         ];
 
         // --- 組件 ---
@@ -173,7 +137,7 @@
         const TypeBadge = ({ type }) => {
             const names = { fighting: '格鬥', normal: '一般', water: '水', fire: '火', ghost: '幽靈' };
             const colors = { fighting: 'bg-red-700', normal: 'bg-stone-400', water: 'bg-blue-500', fire: 'bg-orange-500', ghost: 'bg-purple-700' };
-            return <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${colors[type] || 'bg-gray-500'}`}>{names[type] || type}</span>;
+            return <span className={`px-2 py-0.5 rounded text-xs font-bold text-white shadow-sm ${colors[type] || 'bg-gray-500'}`}>{names[type] || type}</span>;
         };
 
         const App = () => {
@@ -195,13 +159,15 @@
             const [turn, setTurn] = useState('player');
             const [energyAttached, setEnergyAttached] = useState(false);
             const [supporterUsed, setSupporterUsed] = useState(false);
-            const [evolutionMode, setEvolutionMode] = useState(null); // 存儲正在準備進化的卡牌 index
+            const [evolutionMode, setEvolutionMode] = useState(null); 
+            const [hasAttacked, setHasAttacked] = useState(false); // 新增：每回合只能攻擊一次
 
-            // UI
+            // UI & Quiz 狀態
             const [msg, setMsg] = useState("");
             const [floater, setFloater] = useState(null);
             const [tip, setTip] = useState(null);
             const [anim, setAnim] = useState({ p: '', e: '' });
+            const [quiz, setQuiz] = useState(null); // { question, move }
 
             // 初始化
             const initGame = () => { setEnemyIdx(0); startLevel(0, true); };
@@ -215,11 +181,8 @@
                     const initHand = newDeck.slice(0, 7);
                     const remaining = newDeck.slice(7);
                     
-                    // 初始必定有一隻基礎寶可夢上場，若無則強制塞一隻 (簡化規則)
                     let starterCard = initHand.find(c => c.type === 'pokemon' && POKEMON_DB[c.protoId].stage === 'basic');
-                    if (!starterCard) {
-                        starterCard = { type: 'pokemon', protoId: 'machop' }; // 保底
-                    }
+                    if (!starterCard) starterCard = { type: 'pokemon', protoId: 'machop' }; 
                     
                     const starter = { 
                         ...POKEMON_DB[starterCard.protoId], 
@@ -228,8 +191,7 @@
                         instanceId: Date.now() 
                     };
 
-                    // 從手牌移除那張起始牌
-                    const finalHand = initHand.filter(c => c !== starterCard); // 這裡可能移除多張一樣的，暫且不優化細節
+                    const finalHand = initHand.filter(c => c !== starterCard);
 
                     setActivePkmn(starter);
                     setBench([]);
@@ -237,7 +199,6 @@
                     setDeck(remaining);
                     setDiscard([]);
                 } else {
-                    // 回滿血
                     if(activePkmn) setActivePkmn(p => ({...p, currentHp: p.maxHp}));
                     setBench(prev => prev.map(p => ({...p, currentHp: p.maxHp})));
                     drawCard(1);
@@ -246,6 +207,7 @@
                 setTurn('player');
                 setEnergyAttached(false);
                 setSupporterUsed(false);
+                setHasAttacked(false);
                 setMsg(`遭遇敵人：${enemy.name}！`);
                 setEnemyNextMove(enemy.moves[Math.floor(Math.random() * enemy.moves.length)]);
                 setScene('battle');
@@ -267,7 +229,6 @@
 
             // --- 核心邏輯 ---
 
-            // 1. 附能量
             const attachEnergy = (cardIdx) => {
                 if (turn !== 'player' || energyAttached) return;
                 setActivePkmn(p => ({ ...p, energy: p.energy + 1 }));
@@ -276,7 +237,6 @@
                 setMsg(`為 ${activePkmn.name} 充能！`);
             };
 
-            // 2. 打出寶可夢 (基礎直接上，進化需選擇目標)
             const playPokemonCard = (cardIdx) => {
                 if (turn !== 'player') return;
                 const card = hand[cardIdx];
@@ -289,16 +249,14 @@
                     }
                     const newPkmn = { ...proto, currentHp: proto.maxHp, energy: 0, instanceId: Date.now() + Math.random() };
                     setBench(b => [...b, newPkmn]);
-                    discardCard(cardIdx, false); // 不進棄牌，而是進場
+                    discardCard(cardIdx, false); 
                     setMsg(`${newPkmn.name} 進入備戰區！`);
                 } else {
-                    // 進入進化模式
                     setEvolutionMode(cardIdx);
-                    setMsg(`請選擇 ${proto.evolvesFrom === 'machop' ? '腕力' : proto.evolvesFrom === 'riolu' ? '利歐路' : proto.evolvesFrom === 'scorbunny' ? '炎兔兒' : '淚眼蜥'} 進行進化！`);
+                    setMsg(`請選擇 ${proto.evolvesFrom ? POKEMON_DB[proto.evolvesFrom].name : ''} 進行進化！`);
                 }
             };
 
-            // 執行進化
             const evolveTarget = (targetType, targetIdx) => {
                 if (evolutionMode === null) return;
                 
@@ -308,14 +266,12 @@
                 
                 let targetPkmn = targetType === 'active' ? activePkmn : bench[targetIdx];
                 
-                // 檢查是否符合進化條件
                 if (targetPkmn.id !== evoProto.evolvesFrom) {
-                    setMsg("這隻寶可夢無法進化成這張卡！");
+                    setMsg("無法進化成這張卡！");
                     setEvolutionMode(null);
                     return;
                 }
 
-                // 執行進化：繼承能量與傷害
                 const damageTaken = targetPkmn.maxHp - targetPkmn.currentHp;
                 const newCurrentHp = evoProto.maxHp - damageTaken;
 
@@ -328,7 +284,7 @@
 
                 if (targetType === 'active') {
                     setActivePkmn(evolvedPkmn);
-                    setAnim({ ...anim, p: 'evolve-anim' }); // 進化特效
+                    setAnim({ ...anim, p: 'evolve-anim' }); 
                 } else {
                     setBench(b => {
                         const newB = [...b];
@@ -337,13 +293,12 @@
                     });
                 }
 
-                discardCard(cardIdx, false); // 卡牌被消耗
+                discardCard(cardIdx, false); 
                 setEvolutionMode(null);
                 setMsg(`進化成功！${evolvedPkmn.name} 登場！`);
                 setTimeout(() => setAnim({ ...anim, p: '' }), 500);
             };
 
-            // 3. 使用訓練家
             const playTrainer = (cardIdx) => {
                 if (turn !== 'player') return;
                 const card = hand[cardIdx];
@@ -358,12 +313,12 @@
                     showFloater(`+${card.val}`, 'heal');
                 } else if (card.effect === 'switch') {
                     if (bench.length === 0) success = false;
-                    else swapPokemon(0); // 簡化：直接換第一隻
+                    else swapPokemon(0); 
                 } else if (card.effect === 'research') {
                     setDiscard(d => [...d, ...hand.filter((_, i) => i !== cardIdx)]);
                     setHand([]);
                     drawCard(card.val);
-                    success = false; // 特殊處理，已經手動棄牌
+                    success = false; 
                 } else if (card.effect === 'ball' || card.effect === 'incense') {
                     const targetStage = card.effect === 'ball' ? 'basic' : 'evolution';
                     const foundIdx = deck.findIndex(c => c.type === 'pokemon' && POKEMON_DB[c.protoId].stage === targetStage);
@@ -401,11 +356,40 @@
                 setMsg(`${newActive.name} 上場！`);
             };
 
-            const attack = (move) => {
-                if (turn !== 'player' || activePkmn.energy < move.cost) {
+            // 準備攻擊 -> 觸發問答
+            const initiateAttack = (move) => {
+                if (turn !== 'player') return;
+                if (hasAttacked) {
+                    setMsg("這個回合已經攻擊過了！");
+                    return;
+                }
+                if (activePkmn.energy < move.cost) {
                     setMsg("能量不足！");
                     return;
                 }
+                
+                // 隨機選題
+                const q = QUIZ_DATABASE[Math.floor(Math.random() * QUIZ_DATABASE.length)];
+                setQuiz({ question: q, move: move });
+            };
+
+            const handleQuizAnswer = (isCorrect) => {
+                if (isCorrect) {
+                    const move = quiz.move;
+                    setQuiz(null); // 關閉問答
+                    executeAttack(move);
+                } else {
+                    setMsg("答錯了！攻擊失敗...");
+                    setQuiz(null);
+                    // 答錯是否扣能量或結束回合？這裡設定為不扣能量但算作已行動，或單純失敗保留回合。
+                    // 根據需求"答對才可以真正發動攻擊"，這裡設定為不結束回合，讓玩家可以重試或做其他事，
+                    // 但為了遊戲流暢度，這裡設定為不執行攻擊動作，玩家仍可繼續操作。
+                }
+            };
+
+            // 執行攻擊 (答對後)
+            const executeAttack = (move) => {
+                setHasAttacked(true); // 標記已攻擊
                 
                 const enemy = ENEMIES[enemyIdx];
                 let dmg = move.dmg;
@@ -415,7 +399,7 @@
                 showFloater(activePkmn.type === enemy.weakness ? `-${dmg} (絕佳!)` : `-${dmg}`, 'dmg');
                 setTip({ text: move.tip, type: 'good' });
                 
-                setAnim({ ...anim, p: 'attack-anim' }); // 待實作
+                setAnim({ ...anim, p: 'attack-anim' }); 
                 
                 if (enemyHp - dmg <= 0) setTimeout(() => enemyIdx < ENEMIES.length-1 ? setScene('clear') : setScene('win'), 1000);
                 else setTimeout(endTurn, 2000);
@@ -425,6 +409,7 @@
                 setTurn('enemy');
                 setTip(null);
                 setEvolutionMode(null);
+                setQuiz(null);
                 setTimeout(enemyAction, 1000);
             };
 
@@ -456,6 +441,7 @@
                 setTurn('player');
                 setEnergyAttached(false);
                 setSupporterUsed(false);
+                setHasAttacked(false); // 重置攻擊狀態
                 setEnemyNextMove(ENEMIES[enemyIdx].moves[Math.floor(Math.random()*ENEMIES[enemyIdx].moves.length)]);
                 drawCard(1);
             };
@@ -470,8 +456,8 @@
             if (scene === 'menu') return (
                 <div className="h-full flex flex-col items-center justify-center battle-bg">
                     <div className="bg-white/90 p-8 rounded-2xl shadow-xl text-center border-4 border-blue-400">
-                        <h1 className="text-4xl font-bold mb-4 text-slate-800">寶可夢健康大戰<br/><span className="text-lg text-blue-600">進化規則版</span></h1>
-                        <p className="mb-6 text-slate-600">使用進化卡牌，擊敗壞習慣軍團！</p>
+                        <h1 className="text-4xl font-bold mb-4 text-slate-800">寶可夢健康大戰<br/><span className="text-lg text-blue-600">進化+問答版</span></h1>
+                        <p className="mb-6 text-slate-600">答對健康知識，發動強力攻擊！</p>
                         <button onClick={initGame} className="bg-red-500 text-white px-8 py-3 rounded-full text-xl font-bold shadow hover:scale-105 transition">開始對戰</button>
                     </div>
                 </div>
@@ -495,6 +481,26 @@
 
             return (
                 <div className="h-full flex flex-col relative battle-bg">
+                    {/* 問答 Modal */}
+                    {quiz && (
+                        <div className="absolute inset-0 bg-black/60 z-[100] flex items-center justify-center backdrop-blur-sm">
+                            <div className="bg-white p-6 rounded-2xl max-w-md w-full shadow-2xl quiz-modal border-4 border-yellow-400">
+                                <h3 className="text-xl font-bold mb-4 text-slate-800 text-center">🧠 健康知識問答</h3>
+                                <p className="mb-6 text-lg font-medium text-slate-700">{quiz.question.q}</p>
+                                <div className="space-y-3">
+                                    {quiz.question.options.map((opt, i) => (
+                                        <button key={i} 
+                                            onClick={() => handleQuizAnswer(i === quiz.question.ans)}
+                                            className="w-full p-3 text-left rounded-lg bg-slate-100 hover:bg-blue-100 hover:text-blue-700 font-bold transition-colors border border-slate-300"
+                                        >
+                                            {i+1}. {opt}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* 浮動文字 */}
                     {floater && <div className={`absolute z-50 text-4xl font-black damage-float ${floater.type === 'heal' ? 'text-green-500' : 'text-red-600'}`} 
                         style={{ top: floater.isPlayer ? '60%' : '30%', left: '50%' }}>{floater.text}</div>}
@@ -509,10 +515,13 @@
                     <div className="h-[30%] flex items-center justify-center relative">
                         <div className="relative flex flex-col items-center">
                             <img src={enemy.img} className={`h-40 object-contain drop-shadow-lg ${anim.e}`} />
-                            <div className="absolute -bottom-6 bg-slate-800/90 text-white px-3 py-1 rounded text-center text-xs w-32 border border-slate-500">
-                                <div>{enemy.name}</div>
-                                <div className="w-full bg-gray-600 h-1.5 rounded mt-1 overflow-hidden"><div className="bg-red-500 h-full transition-all" style={{width: `${(enemyHp/enemy.maxHp)*100}%`}}></div></div>
-                                <div>{enemyHp}/{enemy.maxHp}</div>
+                            <div className="absolute -bottom-10 bg-slate-800/90 text-white px-3 py-2 rounded text-center text-xs w-40 border border-slate-500 shadow-lg">
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="font-bold text-sm">{enemy.name}</span>
+                                    <TypeBadge type={enemy.type} />
+                                </div>
+                                <div className="w-full bg-gray-600 h-2 rounded mt-1 overflow-hidden"><div className="bg-red-500 h-full transition-all" style={{width: `${(enemyHp/enemy.maxHp)*100}%`}}></div></div>
+                                <div className="mt-1">{enemyHp}/{enemy.maxHp}</div>
                             </div>
                         </div>
                     </div>
@@ -537,8 +546,8 @@
                         {/* 招式表 */}
                         <div className="flex flex-col gap-2">
                             {activePkmn.moves.map((m, i) => (
-                                <button key={i} onClick={() => attack(m)} disabled={turn !== 'player' || activePkmn.energy < m.cost}
-                                    className={`px-3 py-2 rounded border-l-4 text-left w-40 text-xs font-bold shadow transition-all ${activePkmn.energy >= m.cost ? 'bg-white border-red-500 hover:translate-x-1' : 'bg-gray-200 border-gray-400 opacity-50'}`}>
+                                <button key={i} onClick={() => initiateAttack(m)} disabled={turn !== 'player' || activePkmn.energy < m.cost || hasAttacked}
+                                    className={`px-3 py-2 rounded border-l-4 text-left w-40 text-xs font-bold shadow transition-all ${activePkmn.energy >= m.cost && !hasAttacked ? 'bg-white border-red-500 hover:translate-x-1' : 'bg-gray-200 border-gray-400 opacity-50'}`}>
                                     <div className="flex justify-between"><span>{m.name}</span><span>{m.dmg}</span></div>
                                     <div className="text-gray-400 mt-1">需 {m.cost} 能量</div>
                                 </button>
@@ -564,7 +573,7 @@
                             <span>{msg}</span>
                             <div className="flex gap-2">
                                 {evolutionMode !== null && <button onClick={() => setEvolutionMode(null)} className="bg-gray-500 px-2 rounded">取消進化</button>}
-                                <button onClick={endTurn} disabled={turn!=='player'} className="bg-yellow-600 px-2 rounded disabled:opacity-50">結束</button>
+                                <button onClick={endTurn} disabled={turn!=='player'} className="bg-yellow-600 px-2 rounded disabled:opacity-50">結束回合</button>
                             </div>
                         </div>
                         <div className="flex-1 flex items-center gap-2 px-4 overflow-x-auto no-scrollbar py-2">
